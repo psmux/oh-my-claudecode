@@ -30,13 +30,19 @@ import {
 } from '../hooks/mode-registry/index.js';
 import { ToolDefinition } from './types.js';
 
-// ExecutionMode from mode-registry (5 modes - NO ralplan)
+// ExecutionMode from mode-registry (5 modes)
 const EXECUTION_MODES: [string, ...string[]] = [
   'autopilot', 'team', 'ralph', 'ultrawork', 'ultraqa'
 ];
 
-// Extended type for state tools - includes ralplan which has state but isn't in mode-registry
-const STATE_TOOL_MODES: [string, ...string[]] = [...EXECUTION_MODES, 'ralplan', 'omc-teams'];
+// Extended type for state tools - includes state-bearing modes outside mode-registry
+const STATE_TOOL_MODES: [string, ...string[]] = [
+  ...EXECUTION_MODES,
+  'ralplan',
+  'omc-teams',
+  'deep-interview'
+];
+const EXTRA_STATE_ONLY_MODES = ['ralplan', 'omc-teams', 'deep-interview'] as const;
 type StateToolMode = typeof STATE_TOOL_MODES[number];
 const CANCEL_SIGNAL_TTL_MS = 30_000;
 
@@ -540,32 +546,19 @@ export const stateListActiveTool: ToolDefinition<{
         // Get active modes from registry for this session
         const activeModes: string[] = [...getActiveModes(root, sessionId)];
 
-        // Also check ralplan for this session
-        try {
-          const ralplanPath = resolveSessionStatePath('ralplan', sessionId, root);
-          if (existsSync(ralplanPath)) {
-            const content = readFileSync(ralplanPath, 'utf-8');
-            const state = JSON.parse(content);
-            if (state.active) {
-              activeModes.push('ralplan');
+        for (const mode of EXTRA_STATE_ONLY_MODES) {
+          try {
+            const statePath = resolveSessionStatePath(mode, sessionId, root);
+            if (existsSync(statePath)) {
+              const content = readFileSync(statePath, 'utf-8');
+              const state = JSON.parse(content);
+              if (state.active) {
+                activeModes.push(mode);
+              }
             }
+          } catch {
+            // Ignore parse errors
           }
-        } catch {
-          // Ignore parse errors
-        }
-
-        // Also check omc-teams for this session
-        try {
-          const omcTeamsPath = resolveSessionStatePath('omc-teams', sessionId, root);
-          if (existsSync(omcTeamsPath)) {
-            const content = readFileSync(omcTeamsPath, 'utf-8');
-            const state = JSON.parse(content);
-            if (state.active) {
-              activeModes.push('omc-teams');
-            }
-          }
-        } catch {
-          // Ignore parse errors
         }
 
         if (activeModes.length === 0) {
@@ -592,28 +585,18 @@ export const stateListActiveTool: ToolDefinition<{
 
       // Check legacy paths
       const legacyActiveModes: string[] = [...getActiveModes(root)];
-      const ralplanPath = getStatePath('ralplan', root);
-      if (existsSync(ralplanPath)) {
-        try {
-          const content = readFileSync(ralplanPath, 'utf-8');
-          const state = JSON.parse(content);
-          if (state.active) {
-            legacyActiveModes.push('ralplan');
+      for (const mode of EXTRA_STATE_ONLY_MODES) {
+        const statePath = getStatePath(mode, root);
+        if (existsSync(statePath)) {
+          try {
+            const content = readFileSync(statePath, 'utf-8');
+            const state = JSON.parse(content);
+            if (state.active) {
+              legacyActiveModes.push(mode);
+            }
+          } catch {
+            // Ignore parse errors
           }
-        } catch {
-          // Ignore parse errors
-        }
-      }
-      const omcTeamsLegacyPath = getStatePath('omc-teams', root);
-      if (existsSync(omcTeamsLegacyPath)) {
-        try {
-          const content = readFileSync(omcTeamsLegacyPath, 'utf-8');
-          const state = JSON.parse(content);
-          if (state.active) {
-            legacyActiveModes.push('omc-teams');
-          }
-        } catch {
-          // Ignore parse errors
         }
       }
 
@@ -629,32 +612,19 @@ export const stateListActiveTool: ToolDefinition<{
       for (const sid of sessionIds) {
         const sessionActiveModes: string[] = [...getActiveModes(root, sid)];
 
-        // Also check ralplan for this session
-        try {
-          const ralplanSessionPath = resolveSessionStatePath('ralplan', sid, root);
-          if (existsSync(ralplanSessionPath)) {
-            const content = readFileSync(ralplanSessionPath, 'utf-8');
-            const state = JSON.parse(content);
-            if (state.active) {
-              sessionActiveModes.push('ralplan');
+        for (const mode of EXTRA_STATE_ONLY_MODES) {
+          try {
+            const statePath = resolveSessionStatePath(mode, sid, root);
+            if (existsSync(statePath)) {
+              const content = readFileSync(statePath, 'utf-8');
+              const state = JSON.parse(content);
+              if (state.active) {
+                sessionActiveModes.push(mode);
+              }
             }
+          } catch {
+            // Ignore parse errors
           }
-        } catch {
-          // Ignore parse errors
-        }
-
-        // Also check omc-teams for this session
-        try {
-          const omcTeamsSessionPath = resolveSessionStatePath('omc-teams', sid, root);
-          if (existsSync(omcTeamsSessionPath)) {
-            const content = readFileSync(omcTeamsSessionPath, 'utf-8');
-            const state = JSON.parse(content);
-            if (state.active) {
-              sessionActiveModes.push('omc-teams');
-            }
-          }
-        } catch {
-          // Ignore parse errors
         }
 
         for (const mode of sessionActiveModes) {
@@ -838,39 +808,25 @@ export const stateGetStatusTool: ToolDefinition<{
         }
       }
 
-      // Also check ralplan (not in MODE_CONFIGS)
-      const ralplanPath = sessionId
-        ? resolveSessionStatePath('ralplan', sessionId, root)
-        : getStatePath('ralplan', root);
-      let ralplanActive = false;
-      if (existsSync(ralplanPath)) {
-        try {
-          const content = readFileSync(ralplanPath, 'utf-8');
-          const state = JSON.parse(content);
-          ralplanActive = state.active === true;
-        } catch {
-          // Ignore parse errors
+      // Also check extra state-only modes (not in MODE_CONFIGS)
+      for (const mode of EXTRA_STATE_ONLY_MODES) {
+        const statePath = sessionId
+          ? resolveSessionStatePath(mode, sessionId, root)
+          : getStatePath(mode, root);
+        let active = false;
+        if (existsSync(statePath)) {
+          try {
+            const content = readFileSync(statePath, 'utf-8');
+            const state = JSON.parse(content);
+            active = state.active === true;
+          } catch {
+            // Ignore parse errors
+          }
         }
+        const icon = active ? '[ACTIVE]' : '[INACTIVE]';
+        lines.push(`${icon} **${mode}**: ${active ? 'Active' : 'Inactive'}`);
+        lines.push(`   Path: \`${statePath}\``);
       }
-      const ralplanIcon = ralplanActive ? '[ACTIVE]' : '[INACTIVE]';
-      lines.push(`${ralplanIcon} **ralplan**: ${ralplanActive ? 'Active' : 'Inactive'}`);
-      lines.push(`   Path: \`${ralplanPath}\``);
-
-      // Also check omc-teams (not in MODE_CONFIGS)
-      const omcTeamsPath = sessionId
-        ? resolveSessionStatePath('omc-teams', sessionId, root)
-        : getStatePath('omc-teams', root);
-      let omcTeamsActive = false;
-      if (existsSync(omcTeamsPath)) {
-        try {
-          const content = readFileSync(omcTeamsPath, 'utf-8');
-          const state = JSON.parse(content);
-          omcTeamsActive = state.active === true;
-        } catch { /* ignore parse errors */ }
-      }
-      const omcTeamsIcon = omcTeamsActive ? '[ACTIVE]' : '[INACTIVE]';
-      lines.push(`${omcTeamsIcon} **omc-teams**: ${omcTeamsActive ? 'Active' : 'Inactive'}`);
-      lines.push(`   Path: \`${omcTeamsPath}\``);
 
       return {
         content: [{

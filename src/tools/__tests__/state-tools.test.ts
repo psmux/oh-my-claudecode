@@ -303,6 +303,21 @@ describe('state-tools', () => {
       expect(result.content[0].text).toContain('team');
     });
 
+    it('should include deep-interview mode when deep-interview state is active', async () => {
+      await stateWriteTool.handler({
+        mode: 'deep-interview',
+        active: true,
+        state: { phase: 'questioning' },
+        workingDirectory: TEST_DIR,
+      });
+
+      const result = await stateListActiveTool.handler({
+        workingDirectory: TEST_DIR,
+      });
+
+      expect(result.content[0].text).toContain('deep-interview');
+    });
+
     it('should include team in status output when team state is active', async () => {
       await stateWriteTool.handler({
         mode: 'team',
