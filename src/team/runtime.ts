@@ -6,7 +6,7 @@ import { buildWorkerArgv, resolveValidatedBinaryPath, getWorkerEnv as getModelWo
 import { validateTeamName } from './team-name.js';
 import {
   createTeamSession, spawnWorkerInPane, sendToWorker,
-  isWorkerAlive, killTeamSession, waitForPaneReady,
+  isWorkerAlive, killTeamSession, resolveSplitPaneWorkerPaneIds, waitForPaneReady,
   type TeamSession, type WorkerPaneConfig,
 } from './tmux-session.js';
 import {
@@ -954,7 +954,10 @@ export async function shutdownTeam(
   const sessionMode = (ownsWindow ?? Boolean(configData?.tmuxOwnsWindow))
     ? (sessionName.includes(':') ? 'dedicated-window' : 'detached-session')
     : 'split-pane';
-  await killTeamSession(sessionName, workerPaneIds, leaderPaneId, { sessionMode });
+  const effectiveWorkerPaneIds = sessionMode === 'split-pane'
+    ? await resolveSplitPaneWorkerPaneIds(sessionName, workerPaneIds, leaderPaneId)
+    : workerPaneIds;
+  await killTeamSession(sessionName, effectiveWorkerPaneIds, leaderPaneId, { sessionMode });
 
   // Clean up state
   try {

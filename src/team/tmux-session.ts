@@ -942,6 +942,40 @@ export async function killWorkerPanes(opts: {
   }
 }
 
+function isPaneId(value: string | undefined): value is string {
+  return typeof value === 'string' && /^%\d+$/.test(value.trim());
+}
+
+function dedupeWorkerPaneIds(paneIds: Array<string | undefined>, leaderPaneId?: string): string[] {
+  const unique = new Set<string>();
+  for (const paneId of paneIds) {
+    if (!isPaneId(paneId)) continue;
+    const normalized = paneId.trim();
+    if (normalized === leaderPaneId) continue;
+    unique.add(normalized);
+  }
+  return [...unique];
+}
+
+export async function resolveSplitPaneWorkerPaneIds(
+  sessionName: string,
+  recordedPaneIds?: string[],
+  leaderPaneId?: string,
+): Promise<string[]> {
+  const resolved = dedupeWorkerPaneIds(recordedPaneIds ?? [], leaderPaneId);
+  if (!sessionName.includes(':')) return resolved;
+
+  try {
+    const paneResult = await tmuxAsync(['list-panes', '-t', sessionName, '-F', '#{pane_id}']);
+    return dedupeWorkerPaneIds(
+      [...resolved, ...paneResult.stdout.split('\n').map((paneId) => paneId.trim())],
+      leaderPaneId,
+    );
+  } catch {
+    return resolved;
+  }
+}
+
 /**
  * Kill the team tmux session or just the worker panes, depending on how the
  * team was created.

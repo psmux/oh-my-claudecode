@@ -1238,11 +1238,18 @@ export async function shutdownTeamV2(
 
   // 4. Force kill remaining tmux panes
   try {
-    const { killWorkerPanes, killTeamSession } = await import('./tmux-session.js');
-    const workerPaneIds = config.workers
+    const { killWorkerPanes, killTeamSession, resolveSplitPaneWorkerPaneIds } = await import('./tmux-session.js');
+    const recordedWorkerPaneIds = config.workers
       .map((w) => w.pane_id)
       .filter((p): p is string => typeof p === 'string' && p.trim().length > 0);
     const ownsWindow = config.tmux_window_owned === true;
+    const workerPaneIds = ownsWindow
+      ? recordedWorkerPaneIds
+      : await resolveSplitPaneWorkerPaneIds(
+        config.tmux_session,
+        recordedWorkerPaneIds,
+        config.leader_pane_id ?? undefined,
+      );
     await killWorkerPanes({
       paneIds: workerPaneIds,
       leaderPaneId: config.leader_pane_id ?? undefined,
